@@ -1,6 +1,8 @@
 package com.coolioasjulio.rpc;
 
+import com.google.gson.ExclusionStrategy;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import com.coolioasjulio.rpc.exclusionstrategies.SuperclassExclusionStrategy;
@@ -19,6 +21,8 @@ import java.lang.reflect.Method;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,6 +35,11 @@ public class RPC
     public static void main(String[] args)
     {
         RPC.getInstance().startTcpServer(4444);
+    }
+
+    public enum StrategyType
+    {
+        SERIALIZATION, DESERIALIZATION, BOTH
     }
 
     private static RPC instance;
@@ -53,8 +62,10 @@ public class RPC
     private ServerSocket serverSocket = null;
     private Map<Class<?>,Class<?>> unboxMap;
     private Thread tcpConnectionHandlerThread;
-    private List<Thread> requestHandlerThreads = new ArrayList<>();
+    private List<Thread> requestHandlerThreads;
     private Gson gson;
+    private List<ExclusionStrategy> serializationExclusionStrategies;
+    private List<ExclusionStrategy> deserializationExclusionStrategies;
 
     private RPC()
     {
@@ -69,14 +80,102 @@ public class RPC
         unboxMap.put(Short.class, short.class);
         this.unboxMap = Collections.unmodifiableMap(unboxMap);
 
+        requestHandlerThreads = new ArrayList<>();
+        serializationExclusionStrategies = new ArrayList<>();
+        deserializationExclusionStrategies = new ArrayList<>();
+
+        resetExclusionStrategies();
+        rebuildGson();
+    }
+
+    private void rebuildGson()
+    {
+        GsonBuilder builder = new GsonBuilder();
+        serializationExclusionStrategies.forEach(builder::addSerializationExclusionStrategy);
+        deserializationExclusionStrategies.forEach(builder::addDeserializationExclusionStrategy);
+        this.gson = builder.create();
+    }
+
+    /**
+     * Reset the JSON exclusion strategies to the default strategies.
+     */
+    public void resetExclusionStrategies()
+    {
         Set<Class<?>> whiteList = new HashSet<>(unboxMap.keySet());
         whiteList.addAll(unboxMap.values());
         whiteList.add(RPCResponse.class);
-        this.gson = new Gson().newBuilder()
-            .addSerializationExclusionStrategy(new SuperclassExclusionStrategy())
-            .addDeserializationExclusionStrategy(new SuperclassExclusionStrategy())
-            .addSerializationExclusionStrategy(new WhitelistExclusionStrategy(whiteList))
-            .create();
+        serializationExclusionStrategies.add(new SuperclassExclusionStrategy());
+        serializationExclusionStrategies.add(new WhitelistExclusionStrategy(whiteList));
+
+        deserializationExclusionStrategies.add(new SuperclassExclusionStrategy());
+    }
+
+    /**
+     * This resets all JSON exclusion strategies, INCLUDING THE DEFAULT STRATEGIES. To reset only the user-added
+     * strategies, use <code>resetExclusionStrategies</code> instead.
+     *
+     * @param strategyType The type of strategy to reset.
+     */
+    public void clearExclusionStrategies(StrategyType strategyType)
+    {
+        switch(strategyType)
+        {
+            case BOTH:
+            case SERIALIZATION:
+                this.serializationExclusionStrategies.clear();
+                if(strategyType != StrategyType.BOTH)
+                {
+                    break;
+                }
+
+            case DESERIALIZATION:
+                this.deserializationExclusionStrategies.clear();
+                break;
+        }
+    }
+
+    /**
+     * Add JSON exclusion strategies. Exclusion strategies determine what gets serialized and deserialized to communicate
+     * between the server and client. Some properties must be excluded in order for it to work. Only use this if you
+     * know what you're doing.
+     *
+     * @param strategyType The type of strategy to apply the exclusion strategies to.
+     * @param strategies Exclusion strategies to apply.
+     */
+    public void addExclusionStrategies(StrategyType strategyType, ExclusionStrategy... strategies)
+    {
+        if(strategies.length == 0) return;
+
+        Collection<ExclusionStrategy> collection = Arrays.asList(strategies);
+        addExclusionStrategies(strategyType, collection);
+    }
+
+    /**
+     * Add JSON exclusion strategies. Exclusion strategies determine what gets serialized and deserialized to communicate
+     * between the server and client. Some properties must be excluded in order for it to work. Only use this if you
+     * know what you're doing.
+     *
+     * @param strategyType The type of strategy to apply the exclusion strategies to.
+     * @param strategies Exclusion strategies to apply.
+     */
+    public void addExclusionStrategies(StrategyType strategyType, Collection<ExclusionStrategy> strategies)
+    {
+        switch(strategyType)
+        {
+            case BOTH:
+            case SERIALIZATION:
+                this.serializationExclusionStrategies.addAll(strategies);
+                if(strategyType != StrategyType.BOTH)
+                {
+                    break;
+                }
+
+            case DESERIALIZATION:
+                this.deserializationExclusionStrategies.addAll(strategies);
+                break;
+        }
+
+        rebuildGson();
     }
 
     /**
@@ -165,30 +264,6 @@ public class RPC
         requestHandlerThreads.clear();
     }
 
-    private void tcpConnectionHandlerThread()
-    {
-        while(!Thread.interrupted())
-        {
-            try
-            {
-                System.out.println("Waiting for connection...");
-                Socket socket = serverSocket.accept();
-                System.out.println("Received connection from " + socket.getInetAddress().toString());
-
-                launchRequestHandler(socket.getInputStream(), socket.getOutputStream());
-            }
-            catch(InterruptedIOException e)
-            {
-                break;
-            }
-            catch (IOException e)
-            {
-                e.printStackTrace();
-                break;
-            }
-        }
-    }
-
     /**
      * Launch RPC server using the supplied streams. This allows you to use whatever transport you want, as long
      * as you can get an InputStream and OutputStream. This method launches the request handler thread as a non-daemon.
@@ -250,6 +325,30 @@ public class RPC
         t.setDaemon(daemon);
         t.start();
         requestHandlerThreads.add(t);
+    }
+
+    private void tcpConnectionHandlerThread()
+    {
+        while(!Thread.interrupted())
+        {
+            try
+            {
+                System.out.println("Waiting for connection...");
+                Socket socket = serverSocket.accept();
+                System.out.println("Received connection from " + socket.getInetAddress().toString());
+
+                launchRequestHandler(socket.getInputStream(), socket.getOutputStream());
+            }
+            catch(InterruptedIOException e)
+            {
+                break;
+            }
+            catch (IOException e)
+            {
+                e.printStackTrace();
+                break;
+            }
+        }
     }
 
     private Object invokeMethod(RPCRequest request, Object object)
