@@ -34,7 +34,19 @@ public class RPC
 {
     public static void main(String[] args)
     {
-        RPC.getInstance().startTcpServer(4444);
+        try
+        {
+            ServerSocket serverSocket = new ServerSocket(4444);
+            System.out.println("Waiting for connection...");
+            Socket socket = serverSocket.accept();
+            System.out.println("Received connection from " + socket.getInetAddress().toString());
+
+            RPC.getInstance().launchRequestHandler(socket.getInputStream(), socket.getOutputStream());
+        }
+        catch (IOException e)
+        {
+            e.printStackTrace();
+        }
     }
 
     public enum StrategyType
@@ -59,9 +71,7 @@ public class RPC
         return instance;
     }
 
-    private ServerSocket serverSocket = null;
     private Map<Class<?>,Class<?>> unboxMap;
-    private Thread tcpConnectionHandlerThread;
     private List<Thread> requestHandlerThreads;
     private Gson gson;
     private List<ExclusionStrategy> serializationExclusionStrategies;
@@ -188,31 +198,6 @@ public class RPC
         return requestHandlerThreads.size() > 0;
     }
 
-    /**
-     * Initialize the RPC server using TCP at the supplied port. If it is not already running. If it is, do nothing.
-     * This is by no means required. If you want to use something other than TCP, just use the
-     * <code>launchRequestHandler</code> method. This is just a pre-made implementation of TCP.
-     *
-     * @param port The port to bind the TCP server socket to.
-     */
-    public void startTcpServer(int port)
-    {
-        if(serverSocket != null) return;
-        try
-        {
-            serverSocket = new ServerSocket(port);
-
-            tcpConnectionHandlerThread = new Thread(this::tcpConnectionHandlerThread);
-            tcpConnectionHandlerThread.setDaemon(false);
-            tcpConnectionHandlerThread.start();
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-    }
-
     public void close()
     {
         close(false);
@@ -224,40 +209,23 @@ public class RPC
      */
     public void close(boolean returnImmediately)
     {
-        if(serverSocket != null)
-        {
-            try
-            {
-                serverSocket.close();
-            }
-            catch (IOException e)
-            {
-                e.printStackTrace();
-            }
-
-            if(tcpConnectionHandlerThread != null)
-            {
-                tcpConnectionHandlerThread.interrupt();
-                tcpConnectionHandlerThread = null;
-            }
-
-            serverSocket = null;
-        }
-
         for(Thread t : requestHandlerThreads)
         {
             t.interrupt();
         }
 
-        for(Thread t : requestHandlerThreads)
+        if(!returnImmediately)
         {
-            try
+            for(Thread t : requestHandlerThreads)
             {
-                t.join();
-            }
-            catch (InterruptedException e)
-            {
-                e.printStackTrace();
+                try
+                {
+                    t.join();
+                }
+                catch (InterruptedException e)
+                {
+                    e.printStackTrace();
+                }
             }
         }
 
@@ -325,30 +293,6 @@ public class RPC
         t.setDaemon(daemon);
         t.start();
         requestHandlerThreads.add(t);
-    }
-
-    private void tcpConnectionHandlerThread()
-    {
-        while(!Thread.interrupted())
-        {
-            try
-            {
-                System.out.println("Waiting for connection...");
-                Socket socket = serverSocket.accept();
-                System.out.println("Received connection from " + socket.getInetAddress().toString());
-
-                launchRequestHandler(socket.getInputStream(), socket.getOutputStream());
-            }
-            catch(InterruptedIOException e)
-            {
-                break;
-            }
-            catch (IOException e)
-            {
-                e.printStackTrace();
-                break;
-            }
-        }
     }
 
     private Object invokeMethod(RPCRequest request, Object object)
