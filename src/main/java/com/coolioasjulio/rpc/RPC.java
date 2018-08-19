@@ -12,7 +12,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Constructor;
@@ -41,7 +40,7 @@ public class RPC
             Socket socket = serverSocket.accept();
             System.out.println("Received connection from " + socket.getInetAddress().toString());
 
-            RPC.getInstance().launchRequestHandler(socket.getInputStream(), socket.getOutputStream());
+            RPC.getInstance().createRPCSession(socket.getInputStream(), socket.getOutputStream());
         }
         catch (IOException e)
         {
@@ -239,9 +238,9 @@ public class RPC
      * @param inputStream The input stream from the RPC client
      * @param outputStream The output stream to the RPC client
      */
-    public void launchRequestHandler(InputStream inputStream, OutputStream outputStream)
+    public void createRPCSession(InputStream inputStream, OutputStream outputStream)
     {
-        launchRequestHandler(inputStream, outputStream, false);
+        createRPCSession(inputStream, outputStream, false);
     }
 
     /**
@@ -252,7 +251,7 @@ public class RPC
      * @param outputStream The output stream to the RPC client
      * @param daemon Should the request handler thread be a daemon thread?
      */
-    public void launchRequestHandler(final InputStream inputStream, final OutputStream outputStream, boolean daemon)
+    public void createRPCSession(final InputStream inputStream, final OutputStream outputStream, boolean daemon)
     {
         Thread t = new Thread(() ->
         {
