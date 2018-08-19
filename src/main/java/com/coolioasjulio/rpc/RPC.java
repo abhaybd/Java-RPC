@@ -90,7 +90,11 @@ public class RPC
     }
 
     /**
-     * Initialize the RPC server if it is not already running. If it is, do nothing.
+     * Initialize the RPC server using TCP at the supplied port. If it is not already running. If it is, do nothing.
+     * This is by no means required. If you want to use something other than TCP, just use the
+     * <code>launchRequestHandler</code> method. This is just a pre-made implementation of TCP.
+     *
+     * @param port The port to bind the TCP server socket to.
      */
     public void startTcpServer(int port)
     {
@@ -99,7 +103,7 @@ public class RPC
         {
             serverSocket = new ServerSocket(port);
 
-            tcpConnectionHandlerThread = new Thread(this::rpcThread);
+            tcpConnectionHandlerThread = new Thread(this::tcpConnectionHandlerThread);
             tcpConnectionHandlerThread.setDaemon(false);
             tcpConnectionHandlerThread.start();
         }
@@ -156,7 +160,7 @@ public class RPC
         requestHandlerThreads.clear();
     }
 
-    private void rpcThread()
+    private void tcpConnectionHandlerThread()
     {
         while(!Thread.interrupted())
         {
@@ -166,7 +170,7 @@ public class RPC
                 Socket socket = serverSocket.accept();
                 System.out.println("Received connection from " + socket.getInetAddress().toString());
 
-                launchRequestHandlerThread(socket.getInputStream(), socket.getOutputStream());
+                launchRequestHandler(socket.getInputStream(), socket.getOutputStream());
             }
             catch(InterruptedIOException e)
             {
@@ -180,7 +184,27 @@ public class RPC
         }
     }
 
-    public void launchRequestHandlerThread(final InputStream inputStream, final OutputStream outputStream)
+    /**
+     * Launch RPC server using the supplied streams. This allows you to use whatever transport you want, as long
+     * as you can get an InputStream and OutputStream. This method launches the request handler thread as a non-daemon.
+     *
+     * @param inputStream The input stream from the RPC client
+     * @param outputStream The output stream to the RPC client
+     */
+    public void launchRequestHandler(InputStream inputStream, OutputStream outputStream)
+    {
+        launchRequestHandler(inputStream, outputStream, false);
+    }
+
+    /**
+     * Launch RPC server using the supplied streams. This allows you to use whatever transport you want, as long
+     * as you can get an InputStream and OutputStream.
+     *
+     * @param inputStream The input stream from the RPC client
+     * @param outputStream The output stream to the RPC client
+     * @param daemon Should the request handler thread be a daemon thread?
+     */
+    public void launchRequestHandler(final InputStream inputStream, final OutputStream outputStream, boolean daemon)
     {
         Thread t = new Thread(() ->
         {
@@ -218,7 +242,7 @@ public class RPC
                 e.printStackTrace();
             }
         });
-        t.setDaemon(false);
+        t.setDaemon(daemon);
         t.start();
         requestHandlerThreads.add(t);
     }
