@@ -114,11 +114,16 @@ public class RPC
         }
     }
 
+    public void close()
+    {
+        close(false);
+    }
+
     /**
      * Close the RPC server socket, interrupt all the threads, and wait for the threads to end.
      * This method does not return until all the threads have stopped.
      */
-    public void close()
+    public void close(boolean returnImmediately)
     {
         if(serverSocket != null)
         {
