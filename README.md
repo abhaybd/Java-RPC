@@ -3,8 +3,33 @@ RPC server for Java that uses reflection for fast (and sketchy) integration into
 
 This project is a dead-simple RPC server that allows other programs/platforms to use RPC to access your Java code. In order to simplify the integration process, it's written entirely with reflection, which makes it easy to use, but also not very performant. This could should NOT be used in production, only for testing or for quick/hacky tasks. Additionally, this is NOT thread safe. It may be in the future, but it isn't right now.
 
-To use, simply grab an RPC instance using `RPC.getInstance()`. You can use whatever transport you want between your RPC server and client, as long as you have an `InputStream` and `OutputStream`. To use the RPC server, use `RPC.getInstance().createRPCSession(inputStream, outputStream)`. This will launch a thread dedicated to handling RPC using those streams. By default, the thread is not a daemon thread, so it will keep your program alive if it isn't closed. To create a daemon thread, use `RPC.getInstance().createRPCSession(inputStream, outputStream, daemon)`, where daemon is a boolean value indicating whether or not the thread should be daemon. To kill the server, use `RPC.getInstance().close()`. This will interrupt all threads. This method will by default wait for every thread to actually stop before returning. To return immediately, use `RPC.getInstance().close(returnImmediately)`, where `returnImmediately` is a boolean value specifying whether or not to return immediately or wait for the threads to close. There is no way to kill the connection with only one client, although that may be implemented in the future. To determine if the RPC server is running using any transport layer, use `RPC.getInstance().isActive()`.
+For the RPC Server, you can use whatever transport you want between your RPC server and client, as long as you have an `InputStream` and `OutputStream`.
 
+### Examples
+
+[An example of a C#/Unity RPC client.](https://github.com/coolioasjulio/FrcDrive/blob/master/Assets/Scripts/RPC.cs)
+
+To create an RPC session between a client and the server using the input and output streams between the client and server:
+
+`RPC.getInstance().createRPCSession(inputStream, outputStream)`
+
+To create an RPC session while specifiying whether or not to make it a daemon:
+
+`RPC.getInstance().createRPCSession(inputStream, outputStream, daemon)`
+
+To kill the server, close all connections, and wait for all threads to stop:
+
+`RPC.getInstance().close()`
+
+To kill the server, close all connections, and return immediately without waiting for the threads:
+
+`RPC.getInstance().close(returnImmediately)`
+
+To determine if the RPC server is running using any transport layer:
+
+`RPC.getInstance().isActive()`.
+
+## RPC Client
 This library contains no support for a client, since the client could be literally anything. Therefore, the rough structure of how the client should operate will be outlined below.
 
 The RPC server will communicate with the RPC client using the input and output streams supplied. The client-server communication takes the form of call and response. Every message to the server must be followed by a reply. Once the connection is established, the client initiates a request by sending a newline delimited JSON-encoded RPC request, taking the form below. The server will evaluate the request, and send back a newline delimited JSON-encoded RPC response, whose form is also shown below.
