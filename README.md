@@ -1,2 +1,8 @@
 # Java-RPC
-RPC server for Java that uses reflection for fast (and sketchy) integration into your code
+RPC server for Java that uses reflection for fast (and sketchy) integration into your code.
+
+This project is a dead-simple RPC server that allows other programs/platforms to use RPC to access your Java code. In order to simplify the integration process, it's written entirely with reflection, which makes it easy to use, but also not very performant. This could should NOT be used in production, only for testing or for quick/hacky tasks. Additionally, this is NOT thread safe. It may be in the future, but it isn't right now.
+
+To use, simply grab an RPC instance using `RPC.getInstance()`. You can use whatever transport you want between your RPC server and client, but this includes a premade TCP implementation. To use TCP, call `RPC.getInstance().startTcpServer(port)`, where `port` is the port number that the TCP server socket should bind to.
+
+If you don't want to use TCP, you can use whatever transport you want, as long as you have an `InputStream` and `OutputStream`. To use with custom transports, use `RPC.getInstance().launchRequestHandler(inputStream, outputStream)`. This will launch a thread dedicated to handling RPC using those streams. By default, the thread is not a deamon thread, so it will keep your program alive if it isn't closed. To create a daemon thread, use `RPC.getInstance().launchRequestHandler(inputStream, outputStream, daemon)`, where daemon is a boolean value indicating whether or not the thread should be daemon. To kill the server, use `RPC.getInstance().close()`. This will close the TCP server if open, and interrupt all threads. This method will wait for every thread to actually stop before returning. There is no way to kill the connection with only one client, although that may be implemented in the future. To determine if the RPC server is running using any transport layer, use `RPC.getInstance().isActive()`.
