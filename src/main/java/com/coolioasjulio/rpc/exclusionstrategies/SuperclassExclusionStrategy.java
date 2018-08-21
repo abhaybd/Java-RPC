@@ -5,33 +5,28 @@ import com.google.gson.FieldAttributes;
 
 import java.lang.reflect.Field;
 
-public class SuperclassExclusionStrategy implements ExclusionStrategy
-{
+public class SuperclassExclusionStrategy implements ExclusionStrategy {
     @Override
-    public boolean shouldSkipClass(Class<?> arg0)
-    {
+    public boolean shouldSkipClass(Class<?> arg0) {
         return false;
     }
 
     @Override
-    public boolean shouldSkipField(FieldAttributes fieldAttributes)
-    {
+    public boolean shouldSkipField(FieldAttributes fieldAttributes) {
         String fieldName = fieldAttributes.getName();
         Class<?> theClass = fieldAttributes.getDeclaringClass();
 
         return isFieldInSuperclass(theClass, fieldName);
     }
 
-    private boolean isFieldInSuperclass(Class<?> subclass, String fieldName)
-    {
+    private boolean isFieldInSuperclass(Class<?> subclass, String fieldName) {
         Class<?> superclass = subclass.getSuperclass();
         Field field;
 
-        while(superclass != null)
-        {
+        while (superclass != null) {
             field = getField(superclass, fieldName);
 
-            if(field != null)
+            if (field != null)
                 return true;
 
             superclass = superclass.getSuperclass();
@@ -40,14 +35,10 @@ public class SuperclassExclusionStrategy implements ExclusionStrategy
         return false;
     }
 
-    private Field getField(Class<?> theClass, String fieldName)
-    {
-        try
-        {
+    private Field getField(Class<?> theClass, String fieldName) {
+        try {
             return theClass.getDeclaredField(fieldName);
-        }
-        catch(Exception e)
-        {
+        } catch (Exception e) {
             return null;
         }
     }

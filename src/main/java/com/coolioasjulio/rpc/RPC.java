@@ -9,6 +9,7 @@ import com.coolioasjulio.rpc.exclusionstrategies.SuperclassExclusionStrategy;
 import com.coolioasjulio.rpc.exclusionstrategies.WhitelistExclusionStrategy;
 
 import java.io.BufferedReader;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -29,27 +30,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class RPC
-{
-    public static void main(String[] args)
-    {
-        try
-        {
+public class RPC {
+    public static void main(String[] args) {
+        try {
             ServerSocket serverSocket = new ServerSocket(4444);
             System.out.println("Waiting for connection...");
             Socket socket = serverSocket.accept();
             System.out.println("Received connection from " + socket.getInetAddress().toString());
 
             RPC.getInstance().createRPCSession(socket.getInputStream(), socket.getOutputStream());
-        }
-        catch (IOException e)
-        {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public enum StrategyType
-    {
+    public enum StrategyType {
         SERIALIZATION, DESERIALIZATION, BOTH
     }
 
@@ -61,24 +56,21 @@ public class RPC
      *
      * @return The RPC server instance
      */
-    public static RPC getInstance()
-    {
-        if(instance == null)
-        {
+    public static RPC getInstance() {
+        if (instance == null) {
             instance = new RPC();
         }
         return instance;
     }
 
-    private Map<Class<?>,Class<?>> unboxMap;
-    private List<Thread> requestHandlerThreads;
+    private Map<Class<?>, Class<?>> unboxMap;
+    private List<Thread> rpcSessions;
     private Gson gson;
     private List<ExclusionStrategy> serializationExclusionStrategies;
     private List<ExclusionStrategy> deserializationExclusionStrategies;
 
-    private RPC()
-    {
-        Map<Class<?>,Class<?>> unboxMap = new HashMap<>();
+    private RPC() {
+        Map<Class<?>, Class<?>> unboxMap = new HashMap<>();
         unboxMap.put(Double.class, double.class);
         unboxMap.put(Integer.class, int.class);
         unboxMap.put(Float.class, float.class);
@@ -89,7 +81,7 @@ public class RPC
         unboxMap.put(Short.class, short.class);
         this.unboxMap = Collections.unmodifiableMap(unboxMap);
 
-        requestHandlerThreads = new ArrayList<>();
+        rpcSessions = new ArrayList<>();
         serializationExclusionStrategies = new ArrayList<>();
         deserializationExclusionStrategies = new ArrayList<>();
 
@@ -97,8 +89,7 @@ public class RPC
         rebuildGson();
     }
 
-    private void rebuildGson()
-    {
+    private void rebuildGson() {
         GsonBuilder builder = new GsonBuilder();
         serializationExclusionStrategies.forEach(builder::addSerializationExclusionStrategy);
         deserializationExclusionStrategies.forEach(builder::addDeserializationExclusionStrategy);
@@ -108,8 +99,7 @@ public class RPC
     /**
      * Reset the JSON exclusion strategies to the default strategies.
      */
-    public void resetExclusionStrategies()
-    {
+    public void resetExclusionStrategies() {
         Set<Class<?>> whiteList = new HashSet<>(unboxMap.keySet());
         whiteList.addAll(unboxMap.values());
         whiteList.add(RPCResponse.class);
@@ -125,15 +115,12 @@ public class RPC
      *
      * @param strategyType The type of strategy to reset.
      */
-    public void clearExclusionStrategies(StrategyType strategyType)
-    {
-        switch(strategyType)
-        {
+    public void clearExclusionStrategies(StrategyType strategyType) {
+        switch (strategyType) {
             case BOTH:
             case SERIALIZATION:
                 this.serializationExclusionStrategies.clear();
-                if(strategyType != StrategyType.BOTH)
-                {
+                if (strategyType != StrategyType.BOTH) {
                     break;
                 }
 
@@ -149,11 +136,10 @@ public class RPC
      * know what you're doing.
      *
      * @param strategyType The type of strategy to apply the exclusion strategies to.
-     * @param strategies Exclusion strategies to apply.
+     * @param strategies   Exclusion strategies to apply.
      */
-    public void addExclusionStrategies(StrategyType strategyType, ExclusionStrategy... strategies)
-    {
-        if(strategies.length == 0) return;
+    public void addExclusionStrategies(StrategyType strategyType, ExclusionStrategy... strategies) {
+        if (strategies.length == 0) return;
 
         Collection<ExclusionStrategy> collection = Arrays.asList(strategies);
         addExclusionStrategies(strategyType, collection);
@@ -165,17 +151,14 @@ public class RPC
      * know what you're doing.
      *
      * @param strategyType The type of strategy to apply the exclusion strategies to.
-     * @param strategies Exclusion strategies to apply.
+     * @param strategies   Exclusion strategies to apply.
      */
-    public void addExclusionStrategies(StrategyType strategyType, Collection<ExclusionStrategy> strategies)
-    {
-        switch(strategyType)
-        {
+    public void addExclusionStrategies(StrategyType strategyType, Collection<ExclusionStrategy> strategies) {
+        switch (strategyType) {
             case BOTH:
             case SERIALIZATION:
                 this.serializationExclusionStrategies.addAll(strategies);
-                if(strategyType != StrategyType.BOTH)
-                {
+                if (strategyType != StrategyType.BOTH) {
                     break;
                 }
 
@@ -192,13 +175,11 @@ public class RPC
      *
      * @return True if the RPC server is running, false otherwise.
      */
-    public boolean isActive()
-    {
-        return requestHandlerThreads.size() > 0;
+    public boolean isActive() {
+        return rpcSessions.size() > 0;
     }
 
-    public void close()
-    {
+    public void close() {
         close(false);
     }
 
@@ -206,147 +187,163 @@ public class RPC
      * Close the RPC server socket, interrupt all the threads, and wait for the threads to end.
      * This method does not return until all the threads have stopped.
      */
-    public void close(boolean returnImmediately)
-    {
-        for(Thread t : requestHandlerThreads)
-        {
+    public void close(boolean returnImmediately) {
+        for (Thread t : rpcSessions) {
             t.interrupt();
         }
 
-        if(!returnImmediately)
-        {
-            for(Thread t : requestHandlerThreads)
-            {
-                try
-                {
+        if (!returnImmediately) {
+            for (Thread t : rpcSessions) {
+                try {
                     t.join();
-                }
-                catch (InterruptedException e)
-                {
+                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
         }
 
-        requestHandlerThreads.clear();
+        rpcSessions.clear();
     }
 
     /**
      * Launch RPC server using the supplied streams. This allows you to use whatever transport you want, as long
      * as you can get an InputStream and OutputStream. This method launches the request handler thread as a non-daemon.
      *
-     * @param inputStream The input stream from the RPC client
+     * @param inputStream  The input stream from the RPC client
      * @param outputStream The output stream to the RPC client
      */
-    public void createRPCSession(InputStream inputStream, OutputStream outputStream)
-    {
-        createRPCSession(inputStream, outputStream, false);
+    public RPCSession createRPCSession(InputStream inputStream, OutputStream outputStream) {
+        return createRPCSession(inputStream, outputStream, false);
     }
 
     /**
      * Launch RPC server using the supplied streams. This allows you to use whatever transport you want, as long
      * as you can get an InputStream and OutputStream.
      *
-     * @param inputStream The input stream from the RPC client
+     * @param inputStream  The input stream from the RPC client
      * @param outputStream The output stream to the RPC client
-     * @param daemon Should the request handler thread be a daemon thread?
+     * @param daemon       Should the request handler thread be a daemon thread?
      */
-    public void createRPCSession(final InputStream inputStream, final OutputStream outputStream, boolean daemon)
-    {
+    public RPCSession createRPCSession(final InputStream inputStream, final OutputStream outputStream, boolean daemon) {
         Thread t = new Thread(() ->
         {
-            try
-            {
+            try {
                 BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
                 PrintStream out = new PrintStream(outputStream);
 
-                Map<String,Object> variables = new HashMap<>();
-                while(!Thread.interrupted())
-                {
+                Map<String, Object> variables = new HashMap<>();
+                while (!Thread.interrupted()) {
                     String line = in.readLine();
-                    if(line == null) break;
-                    else if(line.length() == 0) continue;
+                    if (line == null) break;
+                    else if (line.length() == 0) continue;
                     System.out.println("Received request: " + line);
-                    RPCRequest request = gson.fromJson(line, new TypeToken<RPCRequest>(){}.getType());
-                    if(request.isInstantiate())
-                    {
+                    RPCRequest request = gson.fromJson(line, new TypeToken<RPCRequest>() {
+                    }.getType());
+                    if (request.isInstantiate()) {
                         Object object = instantiateObject(request);
                         variables.put(request.getObjectName(), object);
                         sendRPCResponse(out, request.getId(), object);
-                    } else
-                    {
+                    } else {
                         String objectName = request.getObjectName();
                         Object object = variables.get(objectName);
-                        if(object == null && !objectName.equals("static")) continue;
+                        if (object == null && !objectName.equals("static")) continue;
 
                         Object result = invokeMethod(request, object);
 
                         sendRPCResponse(out, request.getId(), result);
                     }
                 }
-            } catch (IOException e)
-            {
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         });
         t.setDaemon(daemon);
         t.start();
-        requestHandlerThreads.add(t);
+        rpcSessions.add(t);
+        return new RPCSession(t);
     }
 
-    private Object invokeMethod(RPCRequest request, Object object)
-    {
-        if(request.isInstantiate()) throw new IllegalArgumentException("RPCRequest cannot be an instantiation request!");
+    private Object invokeMethod(RPCRequest request, Object object) {
+        if (request.isInstantiate())
+            throw new IllegalArgumentException("RPCRequest cannot be an instantiation request!");
 
         Object result;
-        try
-        {
+        try {
             Class<?> clazz = object == null ? Class.forName(request.getClassName()) : object.getClass();
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
             Method method = clazz.getMethod(request.getMethodName(), argClasses);
             result = method.invoke(object, request.getTypedArgs());
-        } catch(NullPointerException | NoSuchMethodException |
-            IllegalAccessException | InvocationTargetException |
-            ClassNotFoundException e)
-        {
+        } catch (NullPointerException | NoSuchMethodException |
+                IllegalAccessException | InvocationTargetException |
+                ClassNotFoundException e) {
             e.printStackTrace();
             result = e.toString();
-        } catch(Exception e)
-        {
+        } catch (Exception e) {
             result = e.toString();
         }
         return result;
     }
 
-    private Object instantiateObject(RPCRequest request)
-    {
-        if(!request.isInstantiate()) throw new IllegalArgumentException("RPCRequest must be an instantiation request!");
+    private Object instantiateObject(RPCRequest request) {
+        if (!request.isInstantiate())
+            throw new IllegalArgumentException("RPCRequest must be an instantiation request!");
         Object object;
-        try
-        {
+        try {
             Class<?> clazz = Class.forName(request.getClassName());
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
             Constructor<?> constructor = clazz.getConstructor(argClasses);
             object = constructor.newInstance(request.getTypedArgs());
-        } catch(ClassNotFoundException | NoSuchMethodException | InvocationTargetException |
-            IllegalAccessException | InstantiationException e)
-        {
+        } catch (ClassNotFoundException | NoSuchMethodException | InvocationTargetException |
+                IllegalAccessException | InstantiationException e) {
             e.printStackTrace();
             object = e.toString();
-        } catch(Exception e)
-        {
+        } catch (Exception e) {
             object = e.toString();
         }
         return object;
     }
 
-    private void sendRPCResponse(PrintStream out, long id, Object value)
-    {
+    private void sendRPCResponse(PrintStream out, long id, Object value) {
         RPCResponse response = new RPCResponse(id, value);
 
         String jsonResponse = gson.toJson(response);
         System.out.println("Sending response: " + jsonResponse);
         out.println(jsonResponse);
         out.flush();
+    }
+
+    public class RPCSession implements Closeable {
+        private Thread session;
+
+        private RPCSession(Thread session) {
+            this.session = session;
+        }
+
+        /**
+         * Close this specific RPC session. This will wait until the session fully closes before returning.
+         */
+        public void close() {
+            close(false);
+        }
+
+        /**
+         * Close this specific RPC session.
+         *
+         * @param returnImmediately If true, return immediately without waiting for session to close. If false,
+         *                          This method will wait for the session to close.
+         */
+        public void close(boolean returnImmediately) {
+            session.interrupt();
+
+            if (!returnImmediately) {
+                try {
+                    session.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            rpcSessions.remove(session);
+        }
     }
 }
