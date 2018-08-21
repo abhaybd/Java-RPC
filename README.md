@@ -5,29 +5,37 @@ This project is a dead-simple RPC server that allows other programs/platforms to
 
 For the RPC Server, you can use whatever transport you want between your RPC server and client, as long as you have an `InputStream` and `OutputStream`.
 
+Creating an RPC session using `createRPCSession()` will return an `RPC.RPCSession` object, which has a `close()` method, allowing you to close only that RPC session.
+
 ### Examples
 
 [An example of a C#/Unity RPC client.](https://github.com/coolioasjulio/FrcDrive/blob/master/Assets/Scripts/RPC.cs)
 
 To create an RPC session between a client and the server using the input and output streams between the client and server:
 
-`RPC.getInstance().createRPCSession(inputStream, outputStream)`
+    RPC.getInstance().createRPCSession(inputStream, outputStream)
 
 To create an RPC session while specifiying whether or not to make it a daemon:
 
-`RPC.getInstance().createRPCSession(inputStream, outputStream, daemon)`
+    RPC.getInstance().createRPCSession(inputStream, outputStream, daemon)
 
 To kill the server, close all connections, and wait for all threads to stop:
 
-`RPC.getInstance().close()`
+    RPC.getInstance().close()
 
 To kill the server, close all connections, and return immediately without waiting for the threads:
 
-`RPC.getInstance().close(returnImmediately)`
+    RPC.getInstance().close(returnImmediately)
 
 To determine if the RPC server is running using any transport layer:
 
-`RPC.getInstance().isActive()`.
+    RPC.getInstance().isActive()
+
+
+To kill a specific RPC instance:
+
+    RPC.RPCSession session = RPC.getInstance().createRPCSession(inputStream, outputStream) // Create the session
+    session.close() // Kill the session
 
 ## RPC Client
 This library contains no support for a client, since the client could be literally anything. Therefore, the rough structure of how the client should operate will be outlined below.
