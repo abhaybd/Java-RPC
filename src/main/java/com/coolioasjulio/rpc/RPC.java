@@ -237,20 +237,21 @@ public class RPC {
                     if (line == null) break;
                     else if (line.length() == 0) continue;
                     System.out.println("Received request: " + line);
-                    RPCRequest request = gson.fromJson(line, new TypeToken<RPCRequest>() {
-                    }.getType());
+                    RPCRequest request = gson.fromJson(line, new TypeToken<RPCRequest>() {}.getType());
                     if (request.isInstantiate()) {
-                        Object object = instantiateObject(request);
-                        variables.put(request.getObjectName(), object);
-                        sendRPCResponse(out, request.getId(), object);
+                        RPCResponse response = instantiateObject(request);
+                        if (!response.isException()) {
+                            variables.put(request.getObjectName(), response.getValue());
+                        }
+                        sendRPCResponse(out, response);
                     } else {
                         String objectName = request.getObjectName();
                         Object object = variables.get(objectName);
                         if (object == null && !objectName.equals("static")) continue;
 
-                        Object result = invokeMethod(request, object);
+                        RPCResponse response = invokeMethod(request, object);
 
-                        sendRPCResponse(out, request.getId(), result);
+                        sendRPCResponse(out, response);
                     }
                 }
             } catch (IOException e) {
@@ -263,11 +264,12 @@ public class RPC {
         return new RPCSession(t);
     }
 
-    private Object invokeMethod(RPCRequest request, Object object) {
+    private RPCResponse invokeMethod(RPCRequest request, Object object) {
         if (request.isInstantiate())
             throw new IllegalArgumentException("RPCRequest cannot be an instantiation request!");
 
         Object result;
+        boolean isException = false;
         try {
             Class<?> clazz = object == null ? Class.forName(request.getClassName()) : object.getClass();
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
@@ -278,16 +280,19 @@ public class RPC {
                 ClassNotFoundException e) {
             e.printStackTrace();
             result = e.toString();
+            isException = true;
         } catch (Exception e) {
             result = e.toString();
+            isException = true;
         }
-        return result;
+        return new RPCResponse(request.getId(), result, isException);
     }
 
-    private Object instantiateObject(RPCRequest request) {
+    private RPCResponse instantiateObject(RPCRequest request) {
         if (!request.isInstantiate())
             throw new IllegalArgumentException("RPCRequest must be an instantiation request!");
         Object object;
+        boolean isException = false;
         try {
             Class<?> clazz = Class.forName(request.getClassName());
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
@@ -297,15 +302,15 @@ public class RPC {
                 IllegalAccessException | InstantiationException e) {
             e.printStackTrace();
             object = e.toString();
+            isException = true;
         } catch (Exception e) {
             object = e.toString();
+            isException = true;
         }
-        return object;
+        return new RPCResponse(request.getId(), object, isException);
     }
 
-    private void sendRPCResponse(PrintStream out, long id, Object value) {
-        RPCResponse response = new RPCResponse(id, value);
-
+    private void sendRPCResponse(PrintStream out, RPCResponse response) {
         String jsonResponse = gson.toJson(response);
         System.out.println("Sending response: " + jsonResponse);
         out.println(jsonResponse);
