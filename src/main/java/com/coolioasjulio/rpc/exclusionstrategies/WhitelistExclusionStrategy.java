@@ -1,5 +1,6 @@
 package com.coolioasjulio.rpc.exclusionstrategies;
 
+import com.coolioasjulio.rpc.RPCResponse;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 
@@ -17,12 +18,11 @@ public class WhitelistExclusionStrategy implements ExclusionStrategy {
     public boolean shouldSkipField(FieldAttributes fieldAttributes) {
         Class<?> declaredClass = fieldAttributes.getDeclaredClass();
         Class<?> declaringClass = fieldAttributes.getDeclaringClass();
-        if (declaredClass.isPrimitive() || declaredClass.isArray() || includeSet.contains(declaringClass))
+        if (declaredClass.isPrimitive() || declaredClass.isArray() || includeSet.contains(declaringClass) || declaringClass.equals(
+                RPCResponse.class))
             return false;
-        return !Arrays.stream(declaredClass.getFields())
-                .map(e -> includeSet.contains(e.getType()))
-                .reduce(Boolean::logicalOr)
-                .orElse(false);
+        return Arrays.stream(declaredClass.getFields())
+                .noneMatch(e -> includeSet.contains(e.getType()));
     }
 
     @Override

@@ -1,12 +1,10 @@
 package com.coolioasjulio.rpc;
 
+import com.coolioasjulio.rpc.exclusionstrategies.SuperclassExclusionStrategy;
+import com.coolioasjulio.rpc.exclusionstrategies.WhitelistExclusionStrategy;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
-
-import com.coolioasjulio.rpc.exclusionstrategies.SuperclassExclusionStrategy;
-import com.coolioasjulio.rpc.exclusionstrategies.WhitelistExclusionStrategy;
 
 import java.io.BufferedReader;
 import java.io.Closeable;
@@ -18,8 +16,6 @@ import java.io.PrintStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -31,19 +27,6 @@ import java.util.Map;
 import java.util.Set;
 
 public class RPC {
-    public static void main(String[] args) {
-        try {
-            ServerSocket serverSocket = new ServerSocket(4444);
-            System.out.println("Waiting for connection...");
-            Socket socket = serverSocket.accept();
-            System.out.println("Received connection from " + socket.getInetAddress().toString());
-
-            RPC.getInstance().createRPCSession(socket.getInputStream(), socket.getOutputStream());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
     public enum StrategyType {
         SERIALIZATION, DESERIALIZATION, BOTH
     }
@@ -179,13 +162,17 @@ public class RPC {
         return rpcSessions.size() > 0;
     }
 
+    /**
+     * Interrupt all client sessions, and wait for them to exit before returning.
+     */
     public void close() {
         close(false);
     }
 
     /**
-     * Close the RPC server socket, interrupt all the threads, and wait for the threads to end.
-     * This method does not return until all the threads have stopped.
+     * Interrupt all client sessions, and optionally wait for them to exit before returning.
+     *
+     * @param returnImmediately If true, return without waiting for client sessions to end. Otherwise, wait for them.
      */
     public void close(boolean returnImmediately) {
         for (Thread t : rpcSessions) {
@@ -237,7 +224,7 @@ public class RPC {
                     if (line == null) break;
                     else if (line.length() == 0) continue;
                     System.out.println("Received request: " + line);
-                    RPCRequest request = gson.fromJson(line, new TypeToken<RPCRequest>() {}.getType());
+                    RPCRequest request = gson.fromJson(line, RPCRequest.class);
                     if (request.isInstantiate()) {
                         RPCResponse response = instantiateObject(request);
                         if (!response.isException()) {
