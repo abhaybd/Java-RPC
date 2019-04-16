@@ -1,7 +1,9 @@
-package com.coolioasjulio.rpc;
+package com.coolioasjulio.rpc.server;
 
-import com.coolioasjulio.rpc.exclusionstrategies.SuperclassExclusionStrategy;
-import com.coolioasjulio.rpc.exclusionstrategies.WhitelistExclusionStrategy;
+import com.coolioasjulio.rpc.RPCRequest;
+import com.coolioasjulio.rpc.RPCResponse;
+import com.coolioasjulio.rpc.server.exclusionstrategies.SuperclassExclusionStrategy;
+import com.coolioasjulio.rpc.server.exclusionstrategies.WhitelistExclusionStrategy;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -26,12 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class RPC {
+public class RPCServer {
     public enum StrategyType {
         SERIALIZATION, DESERIALIZATION, BOTH
     }
 
-    private static RPC instance;
+    private static RPCServer instance;
 
     /**
      * Get the instance of the RPC server. If an instance doesn't exist, create one.
@@ -39,9 +41,9 @@ public class RPC {
      *
      * @return The RPC server instance
      */
-    public static RPC getInstance() {
+    public static RPCServer getInstance() {
         if (instance == null) {
-            instance = new RPC();
+            instance = new RPCServer();
         }
         return instance;
     }
@@ -52,7 +54,7 @@ public class RPC {
     private List<ExclusionStrategy> serializationExclusionStrategies;
     private List<ExclusionStrategy> deserializationExclusionStrategies;
 
-    private RPC() {
+    private RPCServer() {
         Map<Class<?>, Class<?>> unboxMap = new HashMap<>();
         unboxMap.put(Double.class, double.class);
         unboxMap.put(Integer.class, int.class);
@@ -226,7 +228,7 @@ public class RPC {
                     System.out.println("Received request: " + line);
                     RPCRequest request = gson.fromJson(line, RPCRequest.class);
                     if (request.isInstantiate()) {
-                        RPCResponse response = instantiateObject(request);
+                        RPCResponse<?> response = instantiateObject(request);
                         if (!response.isException()) {
                             variables.put(request.getObjectName(), response.getValue());
                         }
@@ -234,7 +236,7 @@ public class RPC {
                     } else {
                         String objectName = request.getObjectName();
                         Object object = variables.get(objectName);
-                        if (object == null && !objectName.equals("static")) continue;
+                        if (object == null && !"".equals(objectName)) continue;
 
                         RPCResponse response = invokeMethod(request, object);
 
@@ -275,7 +277,7 @@ public class RPC {
         return new RPCResponse(request.getId(), result, isException);
     }
 
-    private RPCResponse instantiateObject(RPCRequest request) {
+    private RPCResponse<?> instantiateObject(RPCRequest request) {
         if (!request.isInstantiate())
             throw new IllegalArgumentException("RPCRequest must be an instantiation request!");
         Object object;
@@ -294,7 +296,7 @@ public class RPC {
             object = e.toString();
             isException = true;
         }
-        return new RPCResponse(request.getId(), object, isException);
+        return new RPCResponse<>(request.getId(), object, isException);
     }
 
     private void sendRPCResponse(PrintStream out, RPCResponse response) {

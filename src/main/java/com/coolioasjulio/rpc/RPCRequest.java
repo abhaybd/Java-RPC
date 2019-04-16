@@ -3,6 +3,7 @@ package com.coolioasjulio.rpc;
 import com.google.gson.Gson;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,17 @@ public class RPCRequest {
     private String methodName = "";
     private List<String> argClassNames = new ArrayList<>();
     private List<Object> args = new ArrayList<>();
+
+    public RPCRequest(long id, boolean instantiate, String className, String objectName, String methodName, String[] argClassNames, Object[] args)
+    {
+        this.id = id;
+        this.instantiate = instantiate;
+        this.className = className;
+        this.objectName = objectName;
+        this.methodName = methodName;
+        this.argClassNames = Arrays.asList(argClassNames);
+        this.args = Arrays.asList(args);
+    }
 
     public long getId() {
         return id;

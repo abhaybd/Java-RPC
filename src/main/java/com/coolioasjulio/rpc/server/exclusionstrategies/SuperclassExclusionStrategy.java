@@ -1,4 +1,4 @@
-package com.coolioasjulio.rpc.exclusionstrategies;
+package com.coolioasjulio.rpc.server.exclusionstrategies;
 
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;

@@ -1,21 +1,21 @@
 package com.coolioasjulio.rpc;
 
-public class RPCResponse {
+public class RPCResponse<T> {
     private long id;
     private boolean isException;
-    private Object value;
+    private T value;
 
-    public RPCResponse(long id, Object value) {
+    public RPCResponse(long id, T value) {
         this(id, value, false);
     }
 
-    public RPCResponse(long id, Object value, boolean isException) {
+    public RPCResponse(long id, T value, boolean isException) {
         this.id = id;
         this.value = value;
         this.isException = isException;
     }
 
-    public Object getValue() {
+    public T getValue() {
         return value;
     }
 
