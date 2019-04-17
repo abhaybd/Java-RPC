@@ -9,7 +9,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import java.io.BufferedReader;
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -213,35 +212,8 @@ public class RPCServer {
      * @param outputStream The output stream to the RPC client
      * @param daemon       Should the request handler thread be a daemon thread?
      */
-    public RPCSession createRPCSession(final InputStream inputStream, final OutputStream outputStream, boolean daemon) {
-        Thread t = new Thread(() ->
-        {
-            try {
-                BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
-                PrintStream out = new PrintStream(outputStream);
-
-                Map<String, Object> variables = new HashMap<>();
-                while (!Thread.interrupted()) {
-                    String line = in.readLine();
-                    if (line == null) break;
-                    else if (line.length() == 0) continue;
-                    System.out.println("Received request: " + line);
-                    RPCRequest request = gson.fromJson(line, RPCRequest.class);
-                    if (request.isInstantiate()) {
-                        RPCResponse<?> response = instantiateObject(request, variables);
-                        if (!response.isException()) {
-                            variables.put(request.getObjectName(), response.getValue());
-                        }
-                        sendRPCResponse(out, response);
-                    } else {
-                        RPCResponse response = invokeMethod(request, variables);
-                        sendRPCResponse(out, response);
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+    public RPCSession createRPCSession(InputStream inputStream, OutputStream outputStream, boolean daemon) {
+        Thread t = new Thread(new RPCRunnable(inputStream, outputStream));
         t.setDaemon(daemon);
         t.start();
         rpcSessions.add(t);
@@ -258,27 +230,34 @@ public class RPCServer {
             Class<?> clazz;
             Object object = null;
             if (!request.getClassName().isEmpty() && !request.getObjectName().isEmpty()) {
-                Class<?> staticClass = Class.forName(request.getClassName());
-                object = staticClass.getField(request.getObjectName()).get(null);
+                // Both fields are not empty, so this is a method invocation on static object
+                Class<?> staticClass = Class.forName(request.getClassName()); // Get the requested class
+                object = staticClass.getField(request.getObjectName()).get(null); // Get the static object
                 clazz = object.getClass();
             } else if (!request.getClassName().isEmpty()) {
+                // This is a static method invocation
                 clazz = Class.forName(request.getClassName());
             } else if (!request.getObjectName().isEmpty()) {
+                // This is a method invocation on a remote object
                 object = sessionVariables.get(request.getObjectName());
                 clazz = object.getClass();
             } else {
+                // Invalid request
                 throw new Exception("Both className and objectName cannot be empty strings!");
             }
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
-            Method method = clazz.getMethod(request.getMethodName(), argClasses);
+            Method method = clazz.getMethod(request.getMethodName(), argClasses); // Get the method to invoke
+            // Invoke the method. If the method is static then object can be null.
             result = method.invoke(object, request.getTypedArgs(sessionVariables));
         } catch (NullPointerException | NoSuchMethodException |
                 IllegalAccessException | InvocationTargetException |
                 ClassNotFoundException e) {
+            // There was an exception caused by RPC server code.
             e.printStackTrace();
             result = e.toString();
             isException = true;
         } catch (Exception e) {
+            // There was an exception, but it was not caused by the RPC server. Someone else did it.
             result = e.toString();
             isException = true;
         }
@@ -291,16 +270,19 @@ public class RPCServer {
         Object object;
         boolean isException = false;
         try {
+            // Get the class to instantiate
             Class<?> clazz = Class.forName(request.getClassName());
-            Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
-            Constructor<?> constructor = clazz.getConstructor(argClasses);
-            object = constructor.newInstance(request.getTypedArgs(sessionVariables));
+            Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]); // Get the unboxed classes
+            Constructor<?> constructor = clazz.getConstructor(argClasses); // Get the appropriate constructor
+            object = constructor.newInstance(request.getTypedArgs(sessionVariables)); // Instantiate the object
         } catch (ClassNotFoundException | NoSuchMethodException | InvocationTargetException |
                 IllegalAccessException | InstantiationException e) {
+            // There was an exception caused by RPC server code.
             e.printStackTrace();
             object = e.toString();
             isException = true;
         } catch (Exception e) {
+            // There was an exception, but it was not caused by the RPC server. Someone else did it.
             object = e.toString();
             isException = true;
         }
@@ -312,6 +294,53 @@ public class RPCServer {
         System.out.println("Sending response: " + jsonResponse);
         out.println(jsonResponse);
         out.flush();
+    }
+
+    private class RPCRunnable implements Runnable {
+        private final BufferedReader in;
+        private final PrintStream out;
+
+        public RPCRunnable(InputStream inputStream, OutputStream outputStream) {
+            in = new BufferedReader(new InputStreamReader(inputStream));
+            out = new PrintStream(outputStream);
+        }
+
+        @Override
+        public void run() {
+            try {
+                Map<String, Object> variables = new HashMap<>(); // All remote objects will be stored here
+                while (!Thread.interrupted()) {
+                    String line = in.readLine();
+                    if (line == null) break; // The client has closed.
+                    else if (line.length() == 0) continue; // For some reason, the client sent an empty line.
+                    System.out.println("Received request: " + line);
+                    RPCRequest request = gson.fromJson(line, RPCRequest.class); // Deserialize the RPC request
+                    if (request.isInstantiate()) {
+                        // If the request was an instantiation request, attempt to instantiate it.
+                        RPCResponse<?> response = instantiateObject(request, variables);
+                        // If it was successful, add the new remote object to the session variables map.
+                        if (!response.isException()) {
+                            variables.put(request.getObjectName(), response.getValue());
+                        }
+                        // Send back a response containing the instantiated object.
+                        sendRPCResponse(out, response);
+                    } else {
+                        // This request is either a method invocation, static method invocation, or method on static object invocation
+                        RPCResponse response = invokeMethod(request, variables);
+                        sendRPCResponse(out, response);
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                try {
+                    in.close();
+                    out.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     public class RPCSession implements AutoCloseable {
