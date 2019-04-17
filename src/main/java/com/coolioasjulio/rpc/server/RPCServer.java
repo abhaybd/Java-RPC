@@ -314,7 +314,7 @@ public class RPCServer {
         out.flush();
     }
 
-    public class RPCSession implements Closeable {
+    public class RPCSession implements AutoCloseable {
         private Thread session;
 
         private RPCSession(Thread session) {
@@ -324,6 +324,7 @@ public class RPCServer {
         /**
          * Close this specific RPC session. This will wait until the session fully closes before returning.
          */
+        @Override
         public void close() {
             close(false);
         }

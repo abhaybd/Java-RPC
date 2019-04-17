@@ -13,12 +13,18 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
 
-public class RPCClient {
+public class RPCClient implements AutoCloseable {
     private Gson gson;
     private BufferedReader in;
     private PrintStream out;
     private long id;
 
+    /**
+     * Create an RPC client.
+     *
+     * @param in  InputStream coming from the RPC server.
+     * @param out OutputStream going to the RPC server.
+     */
     public RPCClient(InputStream in, OutputStream out) {
         gson = new Gson();
         this.in = new BufferedReader(new InputStreamReader(in));
@@ -174,5 +180,16 @@ public class RPCClient {
      */
     public <T> T instantiateObject(String className, String objectName, String[] argClassNames, Object[] args) {
         return sendRPCRequest(true, className, objectName, "", argClassNames, args);
+    }
+
+    /**
+     * Close the RPC session. A closed RPC session cannot be used any more.
+     *
+     * @throws Exception If an error occurs while closing.
+     */
+    @Override
+    public void close() throws Exception {
+        in.close();
+        out.close();
     }
 }
