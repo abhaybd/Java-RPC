@@ -53,7 +53,7 @@ Properties:
     * To invoke a static method, `className` should be the canonical Java name of the class which holds the static method. `methodName` should be the name of the method to be invoked. `objectName` must be an empty string. (`""`)
     * To invoke a method on a static object, `className` should be the canonical Java name of the class defining the static object, `objectName` should be the name of the static object that defines the method, and `methodName` should be the method to invoke.
 
-## [RPC Response](https://github.com/coolioasjulio/Java-RPC/blob/master/src/main/java/com/coolioasjulio/rpc/RPCResponse.java)
+## [RPC Response](src/main/java/com/coolioasjulio/rpc/RPCResponse.java)
 Properties:
 * **long id** - The id of the RPC response. This will be the same as it's corresponding RPC request.
 * **boolean isException** - If true, the RPC request failed with an exception. `value` will be a string representation of the exception thrown. If false, `value` will be the JSON-encoded result returned by constructor/method invocation.
