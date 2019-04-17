@@ -228,7 +228,7 @@ public class RPCServer {
                     System.out.println("Received request: " + line);
                     RPCRequest request = gson.fromJson(line, RPCRequest.class);
                     if (request.isInstantiate()) {
-                        RPCResponse<?> response = instantiateObject(request);
+                        RPCResponse<?> response = instantiateObject(request, variables);
                         if (!response.isException()) {
                             variables.put(request.getObjectName(), response.getValue());
                         }
@@ -271,7 +271,7 @@ public class RPCServer {
             }
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
             Method method = clazz.getMethod(request.getMethodName(), argClasses);
-            result = method.invoke(object, request.getTypedArgs());
+            result = method.invoke(object, request.getTypedArgs(sessionVariables));
         } catch (NullPointerException | NoSuchMethodException |
                 IllegalAccessException | InvocationTargetException |
                 ClassNotFoundException e) {
@@ -285,7 +285,7 @@ public class RPCServer {
         return new RPCResponse<>(request.getId(), result, isException);
     }
 
-    private RPCResponse<?> instantiateObject(RPCRequest request) {
+    private RPCResponse<?> instantiateObject(RPCRequest request, Map<String, Object> sessionVariables) {
         if (!request.isInstantiate())
             throw new IllegalArgumentException("RPCRequest must be an instantiation request!");
         Object object;
@@ -294,7 +294,7 @@ public class RPCServer {
             Class<?> clazz = Class.forName(request.getClassName());
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
             Constructor<?> constructor = clazz.getConstructor(argClasses);
-            object = constructor.newInstance(request.getTypedArgs());
+            object = constructor.newInstance(request.getTypedArgs(sessionVariables));
         } catch (ClassNotFoundException | NoSuchMethodException | InvocationTargetException |
                 IllegalAccessException | InstantiationException e) {
             e.printStackTrace();

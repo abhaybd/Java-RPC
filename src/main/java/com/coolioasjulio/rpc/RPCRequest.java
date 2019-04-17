@@ -51,28 +51,60 @@ public class RPCRequest {
         return methodName;
     }
 
+    private boolean isRemoteObject(String className) {
+        return className.startsWith("REMOTE:");
+    }
+
+    /**
+     * Get the argument classes.
+     *
+     * @return An ArrayList of classes for each argument in the RPCRequest.
+     * @throws ClassNotFoundException If one of the classes specified in the array doesn't exist.
+     */
     public List<Class<?>> getClasses() throws ClassNotFoundException {
         return getClasses(new HashMap<>());
     }
 
+    /**
+     * Get the unboxed argument classes.
+     *
+     * @param unboxMap The map to map boxed to unboxed classes.
+     * @return An ArrayList of classes for each argument in the RPCRequest, unboxed if possible.
+     * @throws ClassNotFoundException If one of the classes specified in the array doesn't exist.
+     */
     public List<Class<?>> getClasses(Map<Class<?>, Class<?>> unboxMap) throws ClassNotFoundException {
         List<Class<?>> classes = new ArrayList<>();
         for (String className : argClassNames) {
+            if (isRemoteObject(className)) {
+                className = className.split(":", 2)[1];
+            }
             Class<?> clazz = Class.forName(className);
             classes.add(unboxMap.getOrDefault(clazz, clazz));
         }
         return classes;
     }
 
-    public Object[] getTypedArgs() throws ClassNotFoundException {
+    /**
+     * Get the arguments of the RPCRequest casted to the correct type/class.
+     *
+     * @param sessionVariables The remote objects present in the current RPC session. Used for remote objects.
+     * @return An array of objects representing the parameters.
+     * @throws ClassNotFoundException If one of the classes specified in the array doesn't exist.
+     */
+    public Object[] getTypedArgs(Map<String, Object> sessionVariables) throws ClassNotFoundException {
         List<Class<?>> classes = getClasses();
         List<Object> typedArgs = new ArrayList<>();
         Gson gson = new Gson();
 
         for (int i = 0; i < classes.size(); i++) {
             Object o = args.get(i);
+            Object typedArg;
             Class<?> clazz = classes.get(i);
-            Object typedArg = gson.fromJson(gson.toJson(o), clazz);
+            if (isRemoteObject(argClassNames.get(i))) {
+                typedArg = sessionVariables.get(gson.fromJson(gson.toJson(o), String.class));
+            } else {
+                typedArg = gson.fromJson(gson.toJson(o), clazz);
+            }
             typedArgs.add(typedArg);
             assert clazz.isInstance(typedArg);
         }
