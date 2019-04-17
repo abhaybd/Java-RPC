@@ -234,12 +234,7 @@ public class RPCServer {
                         }
                         sendRPCResponse(out, response);
                     } else {
-                        String objectName = request.getObjectName();
-                        Object object = variables.get(objectName);
-                        if (object == null && !"".equals(objectName)) continue;
-
-                        RPCResponse response = invokeMethod(request, object);
-
+                        RPCResponse response = invokeMethod(request, variables);
                         sendRPCResponse(out, response);
                     }
                 }
@@ -253,14 +248,27 @@ public class RPCServer {
         return new RPCSession(t);
     }
 
-    private RPCResponse invokeMethod(RPCRequest request, Object object) {
+    private RPCResponse invokeMethod(RPCRequest request, Map<String, Object> sessionVariables) {
         if (request.isInstantiate())
             throw new IllegalArgumentException("RPCRequest cannot be an instantiation request!");
 
         Object result;
         boolean isException = false;
         try {
-            Class<?> clazz = object == null ? Class.forName(request.getClassName()) : object.getClass();
+            Class<?> clazz;
+            Object object = null;
+            if (!request.getClassName().isEmpty() && !request.getObjectName().isEmpty()) {
+                Class<?> staticClass = Class.forName(request.getClassName());
+                object = staticClass.getField(request.getObjectName()).get(null);
+                clazz = object.getClass();
+            } else if (!request.getClassName().isEmpty()) {
+                clazz = Class.forName(request.getClassName());
+            } else if (!request.getObjectName().isEmpty()) {
+                object = sessionVariables.get(request.getObjectName());
+                clazz = object.getClass();
+            } else {
+                throw new Exception("Both className and objectName cannot be empty strings!");
+            }
             Class<?>[] argClasses = request.getClasses(unboxMap).toArray(new Class<?>[0]);
             Method method = clazz.getMethod(request.getMethodName(), argClasses);
             result = method.invoke(object, request.getTypedArgs());
@@ -274,7 +282,7 @@ public class RPCServer {
             result = e.toString();
             isException = true;
         }
-        return new RPCResponse(request.getId(), result, isException);
+        return new RPCResponse<>(request.getId(), result, isException);
     }
 
     private RPCResponse<?> instantiateObject(RPCRequest request) {

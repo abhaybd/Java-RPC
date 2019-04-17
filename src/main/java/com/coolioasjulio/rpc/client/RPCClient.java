@@ -70,6 +70,14 @@ public class RPCClient {
         return sendRPCRequest(false, "", objectName, methodName, argClassNames, args);
     }
 
+    public <T> T executeMethodOnStaticObject(String className, String objectName, String methodName) {
+        return executeMethodOnStaticObject(className, objectName, methodName, new String[0], new Object[0]);
+    }
+
+    public <T> T executeMethodOnStaticObject(String className, String objectName, String methodName, String[] argClassNames, Object[] args) {
+        return sendRPCRequest(false, className, objectName, methodName, argClassNames, args);
+    }
+
     public <T> T instantiateObject(String className, String objectName) {
         return instantiateObject(className, objectName, new String[0], new Object[0]);
     }

@@ -17,15 +17,18 @@ public class RPCRequest {
     private List<String> argClassNames = new ArrayList<>();
     private List<Object> args = new ArrayList<>();
 
-    public RPCRequest(long id, boolean instantiate, String className, String objectName, String methodName, String[] argClassNames, Object[] args)
-    {
+    public RPCRequest() {
+        // Empty constructor
+    }
+
+    public RPCRequest(long id, boolean instantiate, String className, String objectName, String methodName, String[] argClassNames, Object[] args) {
         this.id = id;
         this.instantiate = instantiate;
-        this.className = className;
-        this.objectName = objectName;
-        this.methodName = methodName;
-        this.argClassNames = Arrays.asList(argClassNames);
-        this.args = Arrays.asList(args);
+        this.className = className == null ? "" : className;
+        this.objectName = objectName == null ? "" : objectName;
+        this.methodName = methodName == null ? "" : methodName;
+        this.argClassNames = Arrays.asList(argClassNames == null ? new String[0] : argClassNames);
+        this.args = Arrays.asList(args == null ? new Object[0] : args);
     }
 
     public long getId() {
@@ -53,16 +56,12 @@ public class RPCRequest {
     }
 
     public List<Class<?>> getClasses(Map<Class<?>, Class<?>> unboxMap) throws ClassNotFoundException {
-        try {
-            List<Class<?>> classes = new ArrayList<>();
-            for (String className : argClassNames) {
-                Class<?> clazz = Class.forName(className);
-                classes.add(unboxMap.getOrDefault(clazz, clazz));
-            }
-            return classes;
-        } catch (ClassNotFoundException e) {
-            throw e;
+        List<Class<?>> classes = new ArrayList<>();
+        for (String className : argClassNames) {
+            Class<?> clazz = Class.forName(className);
+            classes.add(unboxMap.getOrDefault(clazz, clazz));
         }
+        return classes;
     }
 
     public Object[] getTypedArgs() throws ClassNotFoundException {
