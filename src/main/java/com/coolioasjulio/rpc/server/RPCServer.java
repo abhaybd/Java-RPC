@@ -351,6 +351,24 @@ public class RPCServer {
         }
 
         /**
+         * Is this RPC session running?
+         *
+         * @return True if alive, false if closed.
+         */
+        public boolean isAlive() {
+            return session.isAlive();
+        }
+
+        /**
+         * Wait until the RPC session finishes. This does not send a close or interrupt signal.
+         *
+         * @throws InterruptedException If this thread gets interrupted.
+         */
+        public void join() throws InterruptedException {
+            session.join();
+        }
+
+        /**
          * Close this specific RPC session. This will wait until the session fully closes before returning.
          */
         @Override
