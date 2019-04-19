@@ -50,6 +50,7 @@ public class RPCServer {
     private Map<Class<?>, Class<?>> unboxMap;
     private List<Thread> rpcSessions;
     private Gson gson;
+    private boolean loggingEnabled = false;
     private List<ExclusionStrategy> serializationExclusionStrategies;
     private List<ExclusionStrategy> deserializationExclusionStrategies;
 
@@ -78,6 +79,11 @@ public class RPCServer {
         serializationExclusionStrategies.forEach(builder::addSerializationExclusionStrategy);
         deserializationExclusionStrategies.forEach(builder::addDeserializationExclusionStrategy);
         this.gson = builder.create();
+    }
+
+    public void setLoggingEnabled(boolean enabled)
+    {
+        this.loggingEnabled = enabled;
     }
 
     /**
@@ -291,7 +297,10 @@ public class RPCServer {
 
     private void sendRPCResponse(PrintStream out, RPCResponse response) {
         String jsonResponse = gson.toJson(response);
-        System.out.println("Sending response: " + jsonResponse);
+        if (loggingEnabled)
+        {
+            System.out.println("Sending response: " + jsonResponse);
+        }
         out.println(jsonResponse);
         out.flush();
     }
@@ -313,7 +322,10 @@ public class RPCServer {
                     String line = in.readLine();
                     if (line == null) break; // The client has closed.
                     else if (line.length() == 0) continue; // For some reason, the client sent an empty line.
-                    System.out.println("Received request: " + line);
+                    if (loggingEnabled)
+                    {
+                        System.out.println("Received request: " + line);
+                    }
                     RPCRequest request = gson.fromJson(line, RPCRequest.class); // Deserialize the RPC request
                     if (request.isInstantiate()) {
                         // If the request was an instantiation request, attempt to instantiate it.
